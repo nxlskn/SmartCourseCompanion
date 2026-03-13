@@ -105,7 +105,7 @@ function StudentDashboard() {
               {mockStudentCourses.map((course) => (
                 <div
                   key={course.id}
-                  onClick={() => navigate(`/student/courses/${course.id}`)}
+                  onClick={() => navigate(`/courses/${course.id}`)}
                   className="p-4 border border-gray-200 rounded-lg hover:border-blue-600 hover:shadow-md transition cursor-pointer"
                 >
                   <p className="font-semibold text-gray-900 mb-1">{course.code}</p>
