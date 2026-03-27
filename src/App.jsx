@@ -12,6 +12,7 @@ import Templates from "./pages/Templates";
 import UsageStats from "./pages/UsageStats";
 import CoursesPage from "./pages/CoursesPage";
 import CourseDetailPage from "./pages/CourseDetailPage";
+import Account from "./pages/Account";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/account" element={<Account />} />
           <Route element={<Layout />}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/create-course" element={<CreateCourse />} />

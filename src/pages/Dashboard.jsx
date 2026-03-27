@@ -109,6 +109,11 @@ export default function Dashboard() {
     ],
   };
 
+  if (!user) {
+      return <div>Please log in to view your dashboard.</div>;
+    }
+
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 30 }}>
       <h1>Dashboard</h1>
@@ -207,6 +212,7 @@ export default function Dashboard() {
       )}
     </div>
   );
+  
 }
 
 function StatCard({ title, value, danger }) {

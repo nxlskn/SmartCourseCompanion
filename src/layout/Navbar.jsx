@@ -41,6 +41,10 @@ export default function Navbar() {
             <button onClick={handleLogout} style={buttonStyle}>
               Logout
             </button>
+
+            <Link to="/account" style={linkStyle}>
+              My Account
+            </Link>
           </>
         )}
       </div>
