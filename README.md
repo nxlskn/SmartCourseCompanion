@@ -80,14 +80,9 @@ cd ..
 ### 3. Create the backend environment file
 Inside the `backend` folder, create a file named `.env`.
 
-You can copy the example file:
-```bash
-cp backend/.env.example backend/.env
-```
-
 The file should contain:
 ```env
-MONGO_URI=
+MONGO_URI=your_mongo_db_uri
 PORT=5000
 ```
 
@@ -99,11 +94,11 @@ node server.js
 ```
 
 You should see:
-- `MongoDB connected`
 - `Server running on http://127.0.0.1:5000`
+- `MongoDB connected`
 
 ### 5. Run the frontend
-Open another terminal and run:
+Open another terminal and run (within the project folder):
 ```bash
 npm start
 ```
