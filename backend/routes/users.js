@@ -123,6 +123,37 @@ function parseAndValidateCourseInput({ code, name, instructor, term }) {
     },
   };
 }
+function parseAndValidateCategories(categories) {
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return { error: "At least one assessment category is required" };
+  }
+
+  const normalizedCategories = categories.map((category) => ({
+    name: (category.name || "").trim(),
+    weight: Number(category.weight),
+  }));
+
+  for (const category of normalizedCategories) {
+    if (!category.name) {
+      return { error: "Each category must have a name" };
+    }
+
+    if (!Number.isFinite(category.weight) || category.weight <= 0) {
+      return { error: "Each category weight must be a number greater than 0" };
+    }
+  }
+
+  const totalWeight = normalizedCategories.reduce(
+    (sum, category) => sum + category.weight,
+    0
+  );
+
+  if (totalWeight !== 100) {
+    return { error: "Category weights must add up to 100" };
+  }
+
+  return { value: normalizedCategories };
+}
 
 function summarizeCourse(course) {
   const assessments = (course.assessments || []).map(normalizeAssessmentStatus);
@@ -429,7 +460,14 @@ router.post("/:userId/courses", async (req, res) => {
     if (validation.error) {
       return res.status(400).json({ error: validation.error });
     }
+
+    const categoriesValidation = parseAndValidateCategories(req.body.categories);
+    if (categoriesValidation.error) {
+      return res.status(400).json({ error: categoriesValidation.error });
+    }
+
     const { code, name, instructor, term } = validation.value;
+    const categories = categoriesValidation.value;
 
     const existingUser = await db.collection("users").findOne({ _id: objectId });
     if (!existingUser) {
@@ -450,6 +488,7 @@ router.post("/:userId/courses", async (req, res) => {
       name,
       instructor,
       term,
+      categories,
       description: `${name} is now part of your student dashboard. Use this page to track progress, view assessment deadlines, and monitor your current standing.`,
       room: "TBA",
       schedule: "TBA",
