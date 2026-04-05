@@ -90,6 +90,84 @@ function createStarterAssessments(courseCode, courseName) {
   ];
 }
 
+function normalizeTemplateCategories(categories) {
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return { error: "Add at least one assessment category" };
+  }
+
+  const normalizedCategories = categories
+    .map((category) => ({
+      id: category.id || new ObjectId().toString(),
+      name: String(category.name || "").trim(),
+      weight: Number(category.weight),
+    }))
+    .filter((category) => category.name);
+
+  if (!normalizedCategories.length) {
+    return { error: "Add at least one valid assessment category" };
+  }
+
+  const invalidWeight = normalizedCategories.some(
+    (category) => !Number.isFinite(category.weight) || category.weight <= 0
+  );
+
+  if (invalidWeight) {
+    return { error: "Each template category must have a weight greater than 0" };
+  }
+
+  const totalWeight = normalizedCategories.reduce((sum, category) => sum + category.weight, 0);
+
+  if (totalWeight !== 100) {
+    return { error: "Template category weights must add up to 100%" };
+  }
+
+  return { value: normalizedCategories };
+}
+
+function parseAndValidateTemplateInput({ name, description, categories }) {
+  const normalizedName = String(name || "").trim();
+  const normalizedDescription = String(description || "").trim();
+
+  if (!normalizedName) {
+    return { error: "Template name is required" };
+  }
+
+  const categoryValidation = normalizeTemplateCategories(categories);
+  if (categoryValidation.error) {
+    return categoryValidation;
+  }
+
+  return {
+    value: {
+      name: normalizedName,
+      description: normalizedDescription,
+      categories: categoryValidation.value,
+    },
+  };
+}
+
+function buildAssessmentsFromTemplate(template, courseCode, courseName) {
+  const now = new Date();
+
+  return (template.categories || []).map((category, index) => {
+    const dueDate = new Date(now);
+    dueDate.setDate(now.getDate() + (index + 1) * 7);
+
+    return {
+      id: new ObjectId().toString(),
+      title: `${courseCode} ${category.name}`,
+      category: category.name,
+      weight: Number(category.weight),
+      dueDate: dueDate.toISOString().split("T")[0],
+      totalMarks: 100,
+      earnedMarks: index === 0 ? 84 : null,
+      status: index === 0 ? "completed" : "pending",
+      templateSource: template.name,
+      notes: `${courseName} follows the ${template.name} structure.`,
+    };
+  });
+}
+
 function parseAndValidateCourseInput({ code, name, instructor, term }) {
   const normalizedCode = (code || "").trim().toUpperCase();
   const normalizedName = (name || "").trim();
@@ -239,10 +317,6 @@ router.post("/login", async (req, res) => {
     const db = req.app.locals.db;
     const { email, password } = req.body;
 
-    if (!db) {
-      return res.status(503).json({ error: "Database not ready" });
-    }
-
     if (!email || !password) {
       return res.status(400).json({ error: "Missing email or password" });
     }
@@ -252,25 +326,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (typeof user.password !== "string" || !user.password) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const isHashedPassword =
-      typeof user.password === "string" && user.password.startsWith("$2");
-    let passwordMatch = false;
-
-    if (isHashedPassword) {
-      try {
-        passwordMatch = await bcrypt.compare(password, user.password);
-      } catch (error) {
-        console.error("bcrypt compare failed:", error);
-        passwordMatch = false;
-      }
-    } else {
-      passwordMatch = password === user.password;
-    }
-
+    const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -503,6 +559,135 @@ router.delete("/:userId/courses/:courseId", async (req, res) => {
     );
 
     res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/templates", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const templates = await db
+      .collection("courseTemplates")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json({
+      templates: templates.map((template) => ({
+        ...template,
+        id: String(template._id),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/templates", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const validation = parseAndValidateTemplateInput(req.body);
+
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { name, description, categories } = validation.value;
+    const duplicate = await db.collection("courseTemplates").findOne({ name });
+
+    if (duplicate) {
+      return res.status(409).json({ error: "A template with that name already exists" });
+    }
+
+    const template = {
+      name,
+      description,
+      categories,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("courseTemplates").insertOne(template);
+
+    res.status(201).json({
+      template: {
+        ...template,
+        id: String(result.insertedId),
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/:userId/courses/from-template/:templateId", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const objectId = parseUserId(req.params.userId);
+
+    if (!objectId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    if (!ObjectId.isValid(req.params.templateId)) {
+      return res.status(400).json({ error: "Invalid template id" });
+    }
+
+    const user = await db.collection("users").findOne({ _id: objectId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const template = await db
+      .collection("courseTemplates")
+      .findOne({ _id: new ObjectId(req.params.templateId) });
+
+    if (!template) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+
+    const validation = parseAndValidateCourseInput(req.body);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { code, name, instructor, term } = validation.value;
+    const duplicateCourse = (user.courses || []).find(
+      (course) => course.code.trim().toUpperCase() === code
+    );
+
+    if (duplicateCourse) {
+      return res.status(409).json({ error: "You already added that course code" });
+    }
+
+    const newCourse = {
+      id: new ObjectId().toString(),
+      code,
+      name,
+      instructor,
+      term,
+      description:
+        template.description ||
+        `${name} was added from the ${template.name} template. Use this page to track progress and assessments.`,
+      room: "TBA",
+      schedule: "TBA",
+      credit: 3,
+      templateId: String(template._id),
+      templateName: template.name,
+      assessments: buildAssessmentsFromTemplate(template, code, name),
+    };
+
+    await db.collection("users").updateOne(
+      { _id: objectId },
+      { $push: { courses: newCourse } }
+    );
+
+    res.status(201).json({
+      course: summarizeCourse(newCourse),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });

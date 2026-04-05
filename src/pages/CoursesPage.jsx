@@ -2,13 +2,16 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 import {
+  createUserCourseFromTemplate,
   createUserCourse,
   deleteUserCourse,
+  fetchCourseTemplates,
   fetchUserCourses,
   updateUserCourse,
 } from "../api/users";
 import CourseCard from "../components/CourseCard";
 import CourseFormModal from "../components/CourseFormModal";
+import Modal from "../components/Modal";
 
 function CoursesPage() {
   const { user } = useContext(AuthContext);
@@ -22,6 +25,15 @@ function CoursesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [templates, setTemplates] = useState([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateCourseForm, setTemplateCourseForm] = useState({
+    code: "",
+    name: "",
+    instructor: "",
+    term: "",
+  });
 
   const filteredCourses = useMemo(
     () =>
@@ -55,6 +67,19 @@ function CoursesPage() {
 
     loadCourses();
   }, [user?.userId]);
+
+  useEffect(() => {
+    async function loadTemplates() {
+      try {
+        const response = await fetchCourseTemplates();
+        setTemplates(response.templates || []);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadTemplates();
+  }, []);
 
   const refreshCourses = async () => {
     const response = await fetchUserCourses(user.userId);
@@ -99,6 +124,37 @@ function CoursesPage() {
     }
   };
 
+  const handleAddFromTemplate = async () => {
+    if (!selectedTemplateId) {
+      setError("Choose a template first");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError("");
+      await createUserCourseFromTemplate(user.userId, selectedTemplateId, templateCourseForm);
+      await refreshCourses();
+      setShowTemplateModal(false);
+      setSelectedTemplateId("");
+      setTemplateCourseForm({
+        code: "",
+        name: "",
+        instructor: "",
+        term: "",
+      });
+
+      const template = templates.find((entry) => entry.id === selectedTemplateId);
+      setSuccessMessage(
+        `${templateCourseForm.code.toUpperCase()} was added from ${template?.name || "the selected template"}.`
+      );
+    } catch (err) {
+      setError(err.message || "Unable to add course from template");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!user) {
     return <div className="card">Please log in to manage courses.</div>;
   }
@@ -119,6 +175,16 @@ function CoursesPage() {
           className="btn-primary"
         >
           Add Course
+        </button>
+        <button
+          onClick={() => {
+            setError("");
+            setShowTemplateModal(true);
+          }}
+          className="btn-secondary"
+          type="button"
+        >
+          Add From Template
         </button>
       </div>
 
@@ -188,6 +254,127 @@ function CoursesPage() {
         isSubmitting={isSaving}
         error={error}
       />
+
+      <Modal
+        isOpen={showTemplateModal}
+        onClose={() => {
+          setShowTemplateModal(false);
+          setSelectedTemplateId("");
+        }}
+        title="Add Course From Template"
+        size="lg"
+      >
+        <div className="template-picker-layout">
+          <div>
+            <label className="field-label" htmlFor="template-select">
+              Choose template
+            </label>
+            <select
+              id="template-select"
+              className="input-field"
+              value={selectedTemplateId}
+              onChange={(event) => setSelectedTemplateId(event.target.value)}
+            >
+              <option value="">Select a template</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+
+            {selectedTemplateId ? (
+              <div className="template-preview-card">
+                <h3>{templates.find((template) => template.id === selectedTemplateId)?.name}</h3>
+                <p>{templates.find((template) => template.id === selectedTemplateId)?.description}</p>
+                <div className="template-category-list">
+                  {(templates.find((template) => template.id === selectedTemplateId)?.categories || []).map((category) => (
+                    <div key={category.id || category.name} className="template-category-row">
+                      <span>{category.name}</span>
+                      <strong>{category.weight}%</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="template-form-grid">
+            <label className="field-label" htmlFor="template-course-code">
+              Course code
+            </label>
+            <input
+              id="template-course-code"
+              className="input-field"
+              value={templateCourseForm.code}
+              onChange={(event) =>
+                setTemplateCourseForm((current) => ({
+                  ...current,
+                  code: event.target.value.toUpperCase(),
+                }))
+              }
+              placeholder="SOEN287"
+            />
+
+            <label className="field-label" htmlFor="template-course-name">
+              Course name
+            </label>
+            <input
+              id="template-course-name"
+              className="input-field"
+              value={templateCourseForm.name}
+              onChange={(event) =>
+                setTemplateCourseForm((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+              placeholder="Web Programming"
+            />
+
+            <label className="field-label" htmlFor="template-course-instructor">
+              Instructor
+            </label>
+            <input
+              id="template-course-instructor"
+              className="input-field"
+              value={templateCourseForm.instructor}
+              onChange={(event) =>
+                setTemplateCourseForm((current) => ({
+                  ...current,
+                  instructor: event.target.value,
+                }))
+              }
+              placeholder="Dr. Margaret Kwan"
+            />
+
+            <label className="field-label" htmlFor="template-course-term">
+              Term
+            </label>
+            <input
+              id="template-course-term"
+              className="input-field"
+              value={templateCourseForm.term}
+              onChange={(event) =>
+                setTemplateCourseForm((current) => ({
+                  ...current,
+                  term: event.target.value,
+                }))
+              }
+              placeholder="Fall 2026"
+            />
+
+            <div className="modal-actions">
+              <button type="button" className="btn-primary" onClick={handleAddFromTemplate} disabled={isSaving}>
+                {isSaving ? "Adding..." : "Create From Template"}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowTemplateModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

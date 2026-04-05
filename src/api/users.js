@@ -60,3 +60,24 @@ export function deleteUserCourse(userId, courseId) {
     method: "DELETE",
   });
 }
+
+export function fetchCourseTemplates() {
+  return request("/templates");
+}
+
+export function createCourseTemplate(payload) {
+  return request("/templates", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createUserCourseFromTemplate(userId, templateId, payload) {
+  return request(
+    `/${encodeURIComponent(userId)}/courses/from-template/${encodeURIComponent(templateId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
