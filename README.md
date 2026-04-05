@@ -5,7 +5,6 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 # Smart Course Companion  
 SOEN 287 – Web Programming  
 Winter 2026  
-
 ## Overview
 
 Smart Course Companion is a web-based application that helps university students manage:
@@ -21,10 +20,10 @@ It also provides basic tools for instructors/admins to manage course structures.
 
 ---
 
-## Features (Deliverable #1)
+## Features
 
 ### Student
-- Register and login (frontend simulation)
+- Register and login
 - Add, edit, delete courses
 - View and manage assessments
 - Enter marks (earned/total)
@@ -37,7 +36,7 @@ It also provides basic tools for instructors/admins to manage course structures.
 - Create and manage courses
 - Define assessment categories and weightings
 - Enable/disable courses
-- View basic usage summaries (UI simulation)
+- View basic usage summaries
 
 ---
 
@@ -52,11 +51,14 @@ It also provides basic tools for instructors/admins to manage course structures.
 
 ## Installation & Running Locally
 
-### 1. Clone the project
+### 1. Clone or download the project
 ```bash
 git clone <repository-url>
 cd smart-course-companion
 ```
+
+If you downloaded a zip, open the extracted project folder in Terminal instead.
+
 ### 2. Install Dependencies
 Make sure Node.js is installed:
 
@@ -65,7 +67,7 @@ node -v
 npm -v
 ```
 
-Then install the project dependencies:
+Then install the frontend dependencies:
 ```bash
 npm install
 ```
@@ -82,7 +84,7 @@ Inside the `backend` folder, create a file named `.env`.
 
 The file should contain:
 ```env
-MONGO_URI=your_mongo_db_uri
+MONGO_URI=your_mongodb_connection_string_here
 PORT=5000
 ```
 
@@ -102,3 +104,16 @@ Open another terminal and run (within the project folder):
 ```bash
 npm start
 ```
+
+### 6. Demo login
+Use:
+
+- `student@test.com / 1234`
+- `admin@test.com / 1234`
+
+## Backend Notes
+
+- The backend lives in `backend/server.js`
+- API routes live in `backend/routes/users.js`
+- Every teammate should use the same `backend/.env` values before testing PRs
+

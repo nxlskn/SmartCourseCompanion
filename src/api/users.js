@@ -61,24 +61,36 @@ export function deleteUserCourse(userId, courseId) {
   });
 }
 
-export function updateUserByEmail(email, updatedData) {
+export function fetchCourseTemplates() {
+  return request("/templates");
+}
 
+export function createCourseTemplate(payload) {
+  return request("/templates", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createUserCourseFromTemplate(userId, templateId, payload) {
   return request(
-    `/updateByEmail/${encodeURIComponent(email)}`,
+    `/${encodeURIComponent(userId)}/courses/from-template/${encodeURIComponent(templateId)}`,
     {
-      method: "PUT",
-      body: JSON.stringify(updatedData)
+      method: "POST",
+      body: JSON.stringify(payload),
     }
   );
+}
 
+export function updateUserByEmail(email, updatedData) {
+  return request(`/updateByEmail/${encodeURIComponent(email)}`, {
+    method: "PUT",
+    body: JSON.stringify(updatedData),
+  });
 }
 
 export function fetchUserById(userId) {
-
-  return request(
-    `/${encodeURIComponent(userId)}`
-  );
-
+  return request(`/${encodeURIComponent(userId)}`);
 }
 
 export function updateUserPassword(userId, currentPassword, newPassword) {

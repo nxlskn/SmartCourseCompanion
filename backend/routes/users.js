@@ -90,6 +90,84 @@ function createStarterAssessments(courseCode, courseName) {
   ];
 }
 
+function normalizeTemplateCategories(categories) {
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return { error: "Add at least one assessment category" };
+  }
+
+  const normalizedCategories = categories
+    .map((category) => ({
+      id: category.id || new ObjectId().toString(),
+      name: String(category.name || "").trim(),
+      weight: Number(category.weight),
+    }))
+    .filter((category) => category.name);
+
+  if (!normalizedCategories.length) {
+    return { error: "Add at least one valid assessment category" };
+  }
+
+  const invalidWeight = normalizedCategories.some(
+    (category) => !Number.isFinite(category.weight) || category.weight <= 0
+  );
+
+  if (invalidWeight) {
+    return { error: "Each template category must have a weight greater than 0" };
+  }
+
+  const totalWeight = normalizedCategories.reduce((sum, category) => sum + category.weight, 0);
+
+  if (totalWeight !== 100) {
+    return { error: "Template category weights must add up to 100%" };
+  }
+
+  return { value: normalizedCategories };
+}
+
+function parseAndValidateTemplateInput({ name, description, categories }) {
+  const normalizedName = String(name || "").trim();
+  const normalizedDescription = String(description || "").trim();
+
+  if (!normalizedName) {
+    return { error: "Template name is required" };
+  }
+
+  const categoryValidation = normalizeTemplateCategories(categories);
+  if (categoryValidation.error) {
+    return categoryValidation;
+  }
+
+  return {
+    value: {
+      name: normalizedName,
+      description: normalizedDescription,
+      categories: categoryValidation.value,
+    },
+  };
+}
+
+function buildAssessmentsFromTemplate(template, courseCode, courseName) {
+  const now = new Date();
+
+  return (template.categories || []).map((category, index) => {
+    const dueDate = new Date(now);
+    dueDate.setDate(now.getDate() + (index + 1) * 7);
+
+    return {
+      id: new ObjectId().toString(),
+      title: `${courseCode} ${category.name}`,
+      category: category.name,
+      weight: Number(category.weight),
+      dueDate: dueDate.toISOString().split("T")[0],
+      totalMarks: 100,
+      earnedMarks: index === 0 ? 84 : null,
+      status: index === 0 ? "completed" : "pending",
+      templateSource: template.name,
+      notes: `${courseName} follows the ${template.name} structure.`,
+    };
+  });
+}
+
 function parseAndValidateCourseInput({ code, name, instructor, term }) {
   const normalizedCode = (code || "").trim().toUpperCase();
   const normalizedName = (name || "").trim();
@@ -123,6 +201,7 @@ function parseAndValidateCourseInput({ code, name, instructor, term }) {
     },
   };
 }
+
 function parseAndValidateCategories(categories) {
   if (!Array.isArray(categories) || categories.length === 0) {
     return { error: "At least one assessment category is required" };
@@ -255,9 +334,9 @@ router.post("/register", async (req, res) => {
 
     res.cookie("userEmail", email, {
       httpOnly: true,
-      secure: false, // true if using HTTPS
+      secure: false,
       sameSite: "lax",
-      maxAge: 1000 * 60 * 60 * 24 // 1 day
+      maxAge: 1000 * 60 * 60 * 24
     });
 
     res.status(201).json({
@@ -267,8 +346,8 @@ router.post("/register", async (req, res) => {
       role: newUser.role,
     });
   } catch (err) {
-  console.error("REGISTER ERROR:", err);
-  res.status(500).json({ error: err.message });
+    console.error("REGISTER ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -298,8 +377,8 @@ router.post("/login", async (req, res) => {
       role: user.role,
     });
   } catch (err) {
-  console.error("LOGIN ERROR:", err);
-  res.status(500).json({ error: err.message });
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -320,74 +399,45 @@ router.get("/getByEmail/:email", async (req, res) => {
     const { password, ...userData } = user;
     res.json(userData);
   } catch (err) {
-  console.error("GET EMAIL ERROR:", err);
-  res.status(500).json({ error: err.message });
+    console.error("GET EMAIL ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-
 router.put("/updateByEmail/:email", async (req, res) => {
-
   try {
-
     const db = req.app.locals.db;
-
-    const originalEmail =
-      req.params.email;
+    const originalEmail = req.params.email;
 
     if (!originalEmail) {
-      return res.status(400).json({
-        error: "Email is required"
-      });
+      return res.status(400).json({ error: "Email is required" });
     }
 
-    const updatedData =
-      req.body;
-
+    const updatedData = req.body;
     delete updatedData.password;
 
-    const result =
-      await db.collection("users")
-        .updateOne(
-          { email: originalEmail },
-          { $set: updatedData }
-        );
+    const result = await db.collection("users").updateOne(
+      { email: originalEmail },
+      { $set: updatedData }
+    );
 
     if (result.matchedCount === 0) {
-      return res.status(404).json({
-        error: "User not found"
-      });
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // If email changed, use new email
-    const newEmail =
-      updatedData.email || originalEmail;
-
-    const updatedUser =
-      await db.collection("users")
-        .findOne({ email: newEmail });
+    const newEmail = updatedData.email || originalEmail;
+    const updatedUser = await db.collection("users").findOne({ email: newEmail });
 
     if (!updatedUser) {
-      return res.status(404).json({
-        error: "Updated user not found"
-      });
+      return res.status(404).json({ error: "Updated user not found" });
     }
 
-    const { password, ...safeUser } =
-      updatedUser;
-
+    const { password, ...safeUser } = updatedUser;
     res.json(safeUser);
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Server error"
-    });
-
+    res.status(500).json({ error: "Server error" });
   }
-
 });
 
 router.get("/:userId/dashboard", async (req, res) => {
@@ -598,7 +648,6 @@ router.delete("/:userId/courses/:courseId", async (req, res) => {
   }
 });
 
-// Update password by user ID
 router.put("/:id/password", async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -609,7 +658,6 @@ router.put("/:id/password", async (req, res) => {
       return res.status(400).json({ error: "Current and new passwords are required" });
     }
 
-    // Find the user by _id
     const user = await db.collection("users").findOne({ _id: new ObjectId(userId) });
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -629,7 +677,6 @@ router.put("/:id/password", async (req, res) => {
   }
 });
 
-// Delete user account by user ID
 router.delete("/:id", async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -644,6 +691,7 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 router.post("/:userId/courses/:courseId/assessments", async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -651,7 +699,7 @@ router.post("/:userId/courses/:courseId/assessments", async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const course = user.courses.find(c => c.id === req.params.courseId);
+    const course = user.courses.find((c) => c.id === req.params.courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
     const { title, category, weight, dueDate, totalMarks } = req.body;
@@ -680,6 +728,7 @@ router.post("/:userId/courses/:courseId/assessments", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 router.put("/:userId/courses/:courseId/assessments/:assessmentId", async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -687,10 +736,10 @@ router.put("/:userId/courses/:courseId/assessments/:assessmentId", async (req, r
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const course = user.courses.find(c => c.id === req.params.courseId);
+    const course = user.courses.find((c) => c.id === req.params.courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
-    const assessment = course.assessments.find(a => a.id === req.params.assessmentId);
+    const assessment = course.assessments.find((a) => a.id === req.params.assessmentId);
     if (!assessment) return res.status(404).json({ error: "Assessment not found" });
 
     const { earnedMarks, status } = req.body;
@@ -709,6 +758,135 @@ router.put("/:userId/courses/:courseId/assessments/:assessmentId", async (req, r
     );
 
     res.json(assessment);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/templates", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const templates = await db
+      .collection("courseTemplates")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json({
+      templates: templates.map((template) => ({
+        ...template,
+        id: String(template._id),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/templates", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const validation = parseAndValidateTemplateInput(req.body);
+
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { name, description, categories } = validation.value;
+    const duplicate = await db.collection("courseTemplates").findOne({ name });
+
+    if (duplicate) {
+      return res.status(409).json({ error: "A template with that name already exists" });
+    }
+
+    const template = {
+      name,
+      description,
+      categories,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("courseTemplates").insertOne(template);
+
+    res.status(201).json({
+      template: {
+        ...template,
+        id: String(result.insertedId),
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/:userId/courses/from-template/:templateId", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const objectId = parseUserId(req.params.userId);
+
+    if (!objectId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    if (!ObjectId.isValid(req.params.templateId)) {
+      return res.status(400).json({ error: "Invalid template id" });
+    }
+
+    const user = await db.collection("users").findOne({ _id: objectId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const template = await db
+      .collection("courseTemplates")
+      .findOne({ _id: new ObjectId(req.params.templateId) });
+
+    if (!template) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+
+    const validation = parseAndValidateCourseInput(req.body);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { code, name, instructor, term } = validation.value;
+    const duplicateCourse = (user.courses || []).find(
+      (course) => course.code.trim().toUpperCase() === code
+    );
+
+    if (duplicateCourse) {
+      return res.status(409).json({ error: "You already added that course code" });
+    }
+
+    const newCourse = {
+      id: new ObjectId().toString(),
+      code,
+      name,
+      instructor,
+      term,
+      description:
+        template.description ||
+        `${name} was added from the ${template.name} template. Use this page to track progress and assessments.`,
+      room: "TBA",
+      schedule: "TBA",
+      credit: 3,
+      templateId: String(template._id),
+      templateName: template.name,
+      assessments: buildAssessmentsFromTemplate(template, code, name),
+    };
+
+    await db.collection("users").updateOne(
+      { _id: objectId },
+      { $push: { courses: newCourse } }
+    );
+
+    res.status(201).json({
+      course: summarizeCourse(newCourse),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
